@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/dotnet/sdk:6.0.400-1-alpine3.16-amd64 AS build-env
+WORKDIR /app
+    
+# Copy csproj and restore as distinct layers
+COPY ./backend/. ./
+RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages dotnet publish -c Debug -o out
+
+# Frontend
+FROM node:16.17.0-alpine3.16 as frontend-env
+WORKDIR /app
+
+COPY ./frontend ./
+RUN --mount=type=cache,target=/root/.yarn YARN_CACHE_FOLDER=/root/.yarn yarn install
+RUN --mount=type=cache,target=/root/.yarn YARN_CACHE_FOLDER=/root/.yarn yarn build
+
+# Build runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:6.0.8-alpine3.16-amd64
+WORKDIR /app
+COPY --from=build-env /app/out .
+COPY --from=frontend-env /app/dist ./wwwroot
+ENTRYPOINT ["dotnet", "fullstack.dll"] 
